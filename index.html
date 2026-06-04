@@ -1,1 +1,286 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Village Mill Babysitting</title>
+  <meta name="description" content="Safe, local, trusted babysitting care for your family.">
+  <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+
+  <!-- ═══════════ HEADER ═══════════ -->
+  <header class="site-header">
+    <div class="container">
+      <a href="./index.html" class="site-logo">Village Mill Babysitting</a>
+      <div class="header-actions">
+        <span id="header-user"  class="header-username" style="display:none"></span>
+        <a href="./dashboard.html" id="header-dashboard-link" class="btn btn-ghost btn-sm"
+           style="display:none">Dashboard</a>
+        <button id="header-signin-btn"  class="btn btn-primary btn-sm">Sign In</button>
+        <button id="header-signout-btn" class="btn btn-ghost btn-sm" style="display:none">Sign Out</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════ AUTH MODAL ═══════════ -->
+  <div class="modal-overlay" id="auth-modal" role="dialog" aria-modal="true" aria-label="Sign In">
+    <div class="modal">
+      <button class="modal-close" id="auth-close" aria-label="Close">&times;</button>
+      <h2>Welcome Back</h2>
+
+      <button class="btn-google" id="google-signin-btn" type="button">
+        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+        </svg>
+        Continue with Google
+      </button>
+
+      <div class="auth-divider"><span>or</span></div>
+
+      <div class="auth-tabs" role="tablist">
+        <button class="auth-tab active" data-tab="signin" role="tab" aria-selected="true">Sign In</button>
+        <button class="auth-tab"        data-tab="signup" role="tab" aria-selected="false">Sign Up</button>
+      </div>
+
+      <!-- Sign In -->
+      <div class="auth-panel active" id="signin-panel">
+        <form id="signin-form" novalidate>
+          <div class="form-group">
+            <label for="si-email">Email</label>
+            <input class="form-control" type="email" id="si-email" name="email"
+                   autocomplete="email" placeholder="you@example.com" required>
+          </div>
+          <div class="form-group">
+            <label for="si-password">Password</label>
+            <input class="form-control" type="password" id="si-password" name="password"
+                   autocomplete="current-password" placeholder="••••••••" required>
+          </div>
+          <button class="btn btn-primary" type="submit" style="width:100%;margin-top:0.25rem">Sign In</button>
+        </form>
+      </div>
+
+      <!-- Sign Up -->
+      <div class="auth-panel" id="signup-panel">
+        <form id="signup-form" novalidate>
+          <div class="form-group">
+            <label for="su-name">Full Name</label>
+            <input class="form-control" type="text" id="su-name" name="name"
+                   autocomplete="name" placeholder="Jane Smith" required>
+          </div>
+          <div class="form-group">
+            <label for="su-email">Email</label>
+            <input class="form-control" type="email" id="su-email" name="email"
+                   autocomplete="email" placeholder="you@example.com" required>
+          </div>
+          <div class="form-group">
+            <label for="su-password">Password</label>
+            <input class="form-control" type="password" id="su-password" name="password"
+                   autocomplete="new-password" placeholder="At least 6 characters" required>
+          </div>
+          <button class="btn btn-primary" type="submit" style="width:100%;margin-top:0.25rem">Create Account</button>
+        </form>
+      </div>
+
+      <div class="auth-error" id="auth-error" role="alert"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ HERO ═══════════ -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-tag">Serving our neighborhood</div>
+      <h1>Trusted care, close to home.</h1>
+      <p>
+        Village Mill Babysitting connects local families with experienced,
+        caring sitters in our community.
+      </p>
+    </div>
+  </section>
+
+  <!-- ═══════════ AVAILABILITY PREVIEW ═══════════ -->
+  <section class="page-section" id="availability-section">
+    <div class="container">
+      <div class="availability-layout">
+        <div class="availability-text">
+          <h2 class="section-title">Check Availability</h2>
+          <p>
+            Browse open dates below. Click any highlighted date to go to the
+            booking dashboard and reserve your session.
+          </p>
+          <p style="margin-top:0.75rem;font-size:0.85rem;color:var(--text-muted)">
+            Green dates have at least one sitter available.
+          </p>
+        </div>
+        <div id="mini-calendar-container"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ BABYSITTERS ═══════════ -->
+  <section class="page-section" id="babysitters-section">
+    <div class="container">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Our Sitters</h2>
+          <p class="section-subtitle">Local caregivers with experience families can count on.</p>
+        </div>
+        <a href="https://forms.gle/bPC5S75A27amqfVU7" target="_blank" rel="noopener"
+           class="btn btn-secondary">Join Us</a>
+      </div>
+      <div id="babysitters-container"></div>
+    </div>
+  </section>
+
+  <!-- ═══════════ REVIEWS ═══════════ -->
+  <section class="page-section" id="reviews-section">
+    <div class="container">
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">What Families Say</h2>
+          <p class="section-subtitle">Honest feedback from parents in our community.</p>
+        </div>
+        <button id="add-review-btn" class="btn btn-secondary">Add Review</button>
+      </div>
+      <div id="reviews-container"></div>
+    </div>
+  </section>
+
+  <!-- ═══════════ ADD REVIEW MODAL ═══════════ -->
+  <div class="modal-overlay review-modal" id="review-modal" role="dialog" aria-modal="true" aria-label="Add a Review">
+    <div class="modal">
+      <button class="modal-close" aria-label="Close">&times;</button>
+      <h2>Leave a Review</h2>
+      <form id="review-form" novalidate>
+        <div class="form-group">
+          <label for="review-babysitter">Babysitter</label>
+          <select class="form-control" id="review-babysitter" required>
+            <option value="">Loading&hellip;</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Rating</label>
+          <div class="rating-input" role="radiogroup" aria-label="Star rating">
+            <input type="radio" id="star5" name="rating" value="5"><label for="star5" aria-label="5 stars">&#9733;</label>
+            <input type="radio" id="star4" name="rating" value="4"><label for="star4" aria-label="4 stars">&#9733;</label>
+            <input type="radio" id="star3" name="rating" value="3"><label for="star3" aria-label="3 stars">&#9733;</label>
+            <input type="radio" id="star2" name="rating" value="2"><label for="star2" aria-label="2 stars">&#9733;</label>
+            <input type="radio" id="star1" name="rating" value="1"><label for="star1" aria-label="1 star">&#9733;</label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="review-text">Review <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+          <textarea class="form-control" id="review-text" rows="3"
+                    placeholder="Share your experience&hellip;" style="resize:vertical"></textarea>
+        </div>
+
+        <button class="btn btn-primary" type="submit" id="review-submit" style="width:100%">
+          Submit Review
+        </button>
+        <div class="auth-error" id="review-error" role="alert"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════ MODULE SCRIPT ═══════════ -->
+  <script type="module">
+    import { onAuthChange, signOut, signInWithGoogle, signInWithEmail, signUpWithEmail }
+      from './js/firebase-app.js';
+    import { initMiniCalendar } from './js/miniCalendar.js';
+    import { initBabysitters   } from './js/babysitters.js';
+    import { initReviews       } from './js/reviews.js';
+    import { initAddReview     } from './js/addreview.js';
+
+    // ── DOM refs ──────────────────────────────── //
+    const authModal      = document.getElementById('auth-modal');
+    const authError      = document.getElementById('auth-error');
+    const signInBtn      = document.getElementById('header-signin-btn');
+    const signOutBtn     = document.getElementById('header-signout-btn');
+    const dashLink       = document.getElementById('header-dashboard-link');
+    const userDisplay    = document.getElementById('header-user');
+
+    // ── Auth modal helpers ────────────────────── //
+    const openModal  = () => { authError.textContent = ''; authModal.classList.add('open'); };
+    const closeModal = () => authModal.classList.remove('open');
+
+    signInBtn.addEventListener('click', openModal);
+    document.getElementById('auth-close').addEventListener('click', closeModal);
+    authModal.addEventListener('click', e => { if (e.target === authModal) closeModal(); });
+
+    // Tab switching
+    authModal.querySelectorAll('.auth-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        authModal.querySelectorAll('.auth-tab')
+          .forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected','false'); });
+        tab.classList.add('active');
+        tab.setAttribute('aria-selected','true');
+        authModal.querySelectorAll('.auth-panel').forEach(p => p.classList.remove('active'));
+        authModal.querySelector(`#${tab.dataset.tab}-panel`).classList.add('active');
+        authError.textContent = '';
+      });
+    });
+
+    // Google
+    document.getElementById('google-signin-btn').addEventListener('click', async () => {
+      authError.textContent = '';
+      const result = await signInWithGoogle();
+      if (result.success) closeModal();
+      else authError.textContent = result.error;
+    });
+
+    // Sign In form
+    document.getElementById('signin-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const email = e.target.querySelector('[name="email"]').value;
+      const pass  = e.target.querySelector('[name="password"]').value;
+      const result = await signInWithEmail(email, pass);
+      if (result.success) closeModal();
+      else authError.textContent = result.error;
+    });
+
+    // Sign Up form
+    document.getElementById('signup-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const name  = e.target.querySelector('[name="name"]').value;
+      const email = e.target.querySelector('[name="email"]').value;
+      const pass  = e.target.querySelector('[name="password"]').value;
+      const result = await signUpWithEmail(email, pass, name);
+      if (result.success) closeModal();
+      else authError.textContent = result.error;
+    });
+
+    // Sign Out
+    signOutBtn.addEventListener('click', () => signOut());
+
+    // ── Auth state → update header ────────────── //
+    onAuthChange(user => {
+      if (user) {
+        const name = user.displayName || user.email?.split('@')[0] || 'User';
+        userDisplay.textContent = name;
+        userDisplay.style.display  = 'block';
+        dashLink.style.display     = 'inline-flex';
+        signInBtn.style.display    = 'none';
+        signOutBtn.style.display   = 'inline-flex';
+      } else {
+        userDisplay.style.display  = 'none';
+        dashLink.style.display     = 'none';
+        signInBtn.style.display    = 'inline-flex';
+        signOutBtn.style.display   = 'none';
+      }
+    });
+
+    // ── Initialize page sections ──────────────── //
+    initMiniCalendar('mini-calendar-container');
+    initBabysitters('babysitters-container');
+    initReviews('reviews-container', 6);
+    initAddReview('add-review-btn', 'review-modal', 'reviews-container');
+  </script>
+
+</body>
+</html>
