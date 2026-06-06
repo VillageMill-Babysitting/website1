@@ -1,14 +1,17 @@
 // ================================================
 // booking.js — Booking form & "My Bookings" list
-// Call setBookingDateTime() from calendar.js callback
+//
+// Date and time are real editable form fields.
+// setBookingDateTime() pre-fills them when the
+// calendar is clicked, but admin/parent can also
+// enter any date and time directly without needing
+// a calendar selection first.
 // ================================================
 
 import { db, auth } from './firebase-app.js';
 import { collection, addDoc, getDocs, query, where, serverTimestamp }
   from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
-let _selectedDate = '';
-let _selectedTime = '';
 let _myBookingsId = '';
 
 // ── Public Init ───────────────────────────────── //
@@ -24,20 +27,22 @@ export function initBookingForm(formContainerId, myBookingsId) {
   loadMyBookings();
 }
 
-// ── Called by calendar.js on date/time selection ─ //
+// ── Pre-fill from calendar selection ─────────── //
+// Called from dashboard.html's onCalendarSelect().
+// Both fields are still directly editable by the user.
 export function setBookingDateTime(date, time) {
-  _selectedDate = date ?? '';
-  _selectedTime = time ?? '';
-
   const dateEl = document.getElementById('booking-date');
   const timeEl = document.getElementById('booking-time');
 
-  if (dateEl) dateEl.value = _selectedDate ? formatDisplayDate(_selectedDate) : '';
-  if (timeEl) timeEl.value = _selectedTime ? formatTime(_selectedTime)         : '';
+  // input[type="date"] expects YYYY-MM-DD natively
+  if (dateEl && date) dateEl.value = date;
 
-  // Scroll booking panel into view smoothly when a date is first selected
-  if (date && !time) {
-    document.getElementById('booking-panel')
+  // <select> options use the same "HH:MM" values
+  if (timeEl && time) timeEl.value = time;
+
+  // Scroll the form panel into view on first date pick
+  if (date) {
+    document.getElementById('booking-form-panel')
       ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
@@ -52,9 +57,14 @@ async function handleSubmit() {
   if (errorEl)   errorEl.textContent   = '';
   if (successEl) successEl.textContent = '';
 
-  if (!user)          { showMsg(errorEl, 'Please sign in to make a booking.'); return; }
-  if (!_selectedDate) { showMsg(errorEl, 'Please select a date from the calendar.'); return; }
-  if (!_selectedTime) { showMsg(errorEl, 'Please select a time slot.'); return; }
+  if (!user) { showMsg(errorEl, 'Please sign in to make a booking.'); return; }
+
+  // Read directly from the form fields — no calendar dep
+  const dateVal = val('booking-date');   // YYYY-MM-DD
+  const timeVal = val('booking-time');   // "09:00" etc.
+
+  if (!dateVal) { showMsg(errorEl, 'Please select or enter a date.'); return; }
+  if (!timeVal) { showMsg(errorEl, 'Please select a time.');          return; }
 
   const parentName  = val('booking-parent-name');
   const phone       = val('booking-phone');
@@ -63,7 +73,7 @@ async function handleSubmit() {
 
   if (!parentName) { showMsg(errorEl, 'Please enter your name.');         return; }
   if (!phone)      { showMsg(errorEl, 'Please enter a phone number.');    return; }
-  if (!children)   { showMsg(errorEl, 'Please enter the child name(s).'); return; }
+  if (!children)   { showMsg(errorEl, 'Please enter child name(s).');     return; }
 
   if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting\u2026'; }
 
@@ -73,8 +83,8 @@ async function handleSubmit() {
       phone,
       children,
       numChildren:        isNaN(numChildren) ? 1 : numChildren,
-      date:               _selectedDate,
-      time:               _selectedTime,
+      date:               dateVal,
+      time:               timeVal,
       status:             'pending',
       assignedBabysitter: '',
       userId:             user.uid,
@@ -82,13 +92,6 @@ async function handleSubmit() {
     });
 
     document.getElementById('booking-form')?.reset();
-    _selectedDate = '';
-    _selectedTime = '';
-    const dateEl = document.getElementById('booking-date');
-    const timeEl = document.getElementById('booking-time');
-    if (dateEl) dateEl.value = '';
-    if (timeEl) timeEl.value = '';
-
     showMsg(successEl, 'Booking submitted. We will contact you to confirm.');
     await loadMyBookings();
 
@@ -112,7 +115,7 @@ async function loadMyBookings() {
     return;
   }
 
-  container.innerHTML = '<div class="loading-indicator"><div class="spinner"></div> Loading bookings...</div>';
+  container.innerHTML = '<div class="loading-indicator"><div class="spinner"></div> Loading bookings\u2026</div>';
 
   try {
     const snap = await getDocs(
@@ -124,7 +127,7 @@ async function loadMyBookings() {
       return;
     }
 
-    // Sort client-side to avoid requiring a composite Firestore index
+    // Sort client-side — avoids requiring a composite Firestore index
     const docs = snap.docs
       .map(d => d.data())
       .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
