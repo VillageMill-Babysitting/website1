@@ -205,28 +205,24 @@
 
               <form id="booking-form" novalidate autocomplete="off">
 
-                <!-- Date & time — pre-filled by calendar click, or enter directly -->
+                <!-- Date — pre-filled by calendar click, or enter directly -->
+                <div class="form-group">
+                  <label for="booking-date">Date</label>
+                  <input type="date" id="booking-date" class="form-control" required>
+                </div>
+
+                <!-- Time range — populated by booking.js; end options filter after start is chosen -->
                 <div class="form-row">
                   <div class="form-group">
-                    <label for="booking-date">Date</label>
-                    <input type="date" id="booking-date" class="form-control" required>
+                    <label for="booking-start">Start Time</label>
+                    <select id="booking-start" class="form-control" required>
+                      <option value="">Start time&hellip;</option>
+                    </select>
                   </div>
                   <div class="form-group">
-                    <label for="booking-time">Time</label>
-                    <select id="booking-time" class="form-control" required>
-                      <option value="">Select a time&hellip;</option>
-                      <option value="08:00">8:00 AM</option>
-                      <option value="09:00">9:00 AM</option>
-                      <option value="10:00">10:00 AM</option>
-                      <option value="11:00">11:00 AM</option>
-                      <option value="12:00">12:00 PM</option>
-                      <option value="13:00">1:00 PM</option>
-                      <option value="14:00">2:00 PM</option>
-                      <option value="15:00">3:00 PM</option>
-                      <option value="16:00">4:00 PM</option>
-                      <option value="17:00">5:00 PM</option>
-                      <option value="18:00">6:00 PM</option>
-                      <option value="19:00">7:00 PM</option>
+                    <label for="booking-end">End Time</label>
+                    <select id="booking-end" class="form-control" required>
+                      <option value="">End time&hellip;</option>
                     </select>
                   </div>
                 </div>
@@ -391,7 +387,7 @@
       signInWithGoogle, signInWithEmail, signUpWithEmail
     } from './js/firebase-app.js';
     import { initCalendar              } from './js/calendar.js';
-    import { initBookingForm, setBookingDateTime } from './js/booking.js';
+    import { initBookingForm, setBookingDate } from './js/booking.js';
     import { initSitterCalendar        } from './js/sittercalendar.js';
     import { initReviews               } from './js/reviews.js';
     import { initAddReview             } from './js/addreview.js';
@@ -534,11 +530,11 @@
 
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
       // INITIALIZE CALENDAR (all roles)
-      // Clicking a date pre-fills the form, but
-      // admin/parent can also enter directly.
+      // Clicking a date pre-fills the date field.
+      // Start/end times are chosen in the form.
       // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      function onCalendarSelect(date, time) {
-        setBookingDateTime(date, time);
+      function onCalendarSelect(date) {
+        setBookingDate(date);
       }
 
       await initCalendar('calendar-container', onCalendarSelect);
