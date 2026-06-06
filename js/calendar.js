@@ -1,6 +1,7 @@
 // ================================================
 // calendar.js — Full booking calendar (dashboard)
-// Renders month view; emits date+time via callback
+// Renders month view; emits selected date via callback.
+// Time range is handled entirely in the booking form.
 // ================================================
 
 import { db } from './firebase-app.js';
@@ -15,9 +16,7 @@ const MONTH_NAMES = [
 
 let _year, _month;
 let _openDates   = new Set();
-let _openTimes   = [];
 let _selDate     = null;
-let _selTime     = null;
 let _onSelect    = null;
 let _containerId = '';
 
@@ -34,9 +33,7 @@ export async function initCalendar(containerId, onSelect) {
   try {
     const snap = await getDoc(doc(db, 'calendar', 'main'));
     if (snap.exists()) {
-      const data = snap.data();
-      (data.openDates ?? []).forEach(d => _openDates.add(d));
-      _openTimes = (data.openTimes ?? []).sort();
+      (snap.data().openDates ?? []).forEach(d => _openDates.add(d));
     }
   } catch (err) {
     console.error('calendar: load error', err);
@@ -63,11 +60,11 @@ export async function initCalendar(containerId, onSelect) {
 
 // ── Render ────────────────────────────────────── //
 function render(container) {
-  container.innerHTML = buildCalHTML() + buildTimeSlotsHTML();
+  container.innerHTML = buildHTML();
   attachHandlers(container);
 }
 
-function buildCalHTML() {
+function buildHTML() {
   const today     = toStr(new Date());
   const firstDay  = new Date(_year, _month, 1).getDay();
   const totalDays = new Date(_year, _month + 1, 0).getDate();
@@ -105,31 +102,7 @@ function buildCalHTML() {
       </div>
       <div class="full-cal-grid">
         <div class="full-cal-days-header">${headers}</div>
-        <div class="full-cal-dates" id="cal-dates">${cells}</div>`;
-}
-
-function buildTimeSlotsHTML() {
-  if (!_selDate) return '</div></div>';  // close .full-cal-grid and .full-calendar
-
-  if (!_openTimes.length) {
-    return `
-        <div class="time-slots-container">
-          <div class="empty-state" style="padding:0.5rem 0;text-align:left">No time slots available for this date.</div>
-        </div>
-      </div>
-    </div>`;
-  }
-
-  const slots = _openTimes.map(t => {
-    const sel = t === _selTime ? ' selected' : '';
-    return `<button class="time-slot-btn${sel}" data-time="${t}">${formatTime(t)}</button>`;
-  }).join('');
-
-  return `
-        <div class="time-slots-container">
-          <div class="time-slots-title">Select a time &mdash; ${formatDisplayDate(_selDate)}</div>
-          <div class="time-slots-grid" id="time-slots-grid">${slots}</div>
-        </div>
+        <div class="full-cal-dates" id="cal-dates">${cells}</div>
       </div>
     </div>`;
 }
@@ -150,23 +123,11 @@ function attachHandlers(container) {
   container.querySelectorAll('.full-cal-day.available').forEach(el => {
     el.addEventListener('click', () => {
       _selDate = el.dataset.date;
-      _selTime = null;
       render(container);
-      if (_onSelect) _onSelect(_selDate, null);
+      if (_onSelect) _onSelect(_selDate);
     });
     el.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault(); el.click();
-      }
-    });
-  });
-
-  container.querySelectorAll('.time-slot-btn').forEach(el => {
-    el.addEventListener('click', () => {
-      _selTime = el.dataset.time;
-      container.querySelectorAll('.time-slot-btn').forEach(b => b.classList.remove('selected'));
-      el.classList.add('selected');
-      if (_onSelect) _onSelect(_selDate, _selTime);
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); }
     });
   });
 }
@@ -177,12 +138,6 @@ function toStr(date) {
   const mo = String(date.getMonth() + 1).padStart(2, '0');
   const d  = String(date.getDate()).padStart(2, '0');
   return `${y}-${mo}-${d}`;
-}
-
-export function formatTime(str) {
-  if (!str) return '';
-  const [h, m] = str.split(':').map(Number);
-  return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
 export function formatDisplayDate(str) {
