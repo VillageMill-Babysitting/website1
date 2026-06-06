@@ -7,7 +7,7 @@
 
 import { db } from './firebase-app.js';
 import {
-  collection, doc, getDocs, getDoc, setDoc, updateDoc,
+  collection, doc, getDocs, setDoc, updateDoc,
   query, orderBy, arrayUnion, arrayRemove
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
