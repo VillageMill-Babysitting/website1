@@ -1,8 +1,16 @@
 // ================================================
 // sittercalendar.js — Schedule management
 // Visible to: babysitter, admin
-// Updates /babysitters/{id} and recalculates
-// /calendar/main after every change
+//
+// Date management: interactive calendar grid —
+//   click any future date to toggle it on/off.
+//   Changes write to Firestore immediately with
+//   an optimistic UI update so the toggle feels instant.
+//
+// Time management: 04:00–23:00 in 15-min slots.
+//   A visual bar shows current availability at a glance.
+//   Three range controls (Set / Block / Restore) each
+//   have separate hour and minute selects.
 // ================================================
 
 import { db } from './firebase-app.js';
@@ -11,19 +19,40 @@ import {
   query, orderBy, arrayUnion, arrayRemove
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
-// Standard bookable time slots (24-hr strings)
-const ALL_SLOTS = [
-  '08:00','09:00','10:00','11:00','12:00',
-  '13:00','14:00','15:00','16:00','17:00','18:00','19:00'
+// ── Time constants ────────────────────────────── //
+// 15-min increments: 04:00, 04:15 … 22:45, 23:00
+const ALL_SLOTS = (() => {
+  const s = [];
+  for (let h = 4; h <= 23; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      if (h === 23 && m > 0) break;
+      s.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+    }
+  }
+  return s;
+})();
+
+const HOURS   = Array.from({ length: 20 }, (_, i) => i + 4); // 4 … 23
+const MINUTES = ['00', '15', '30', '45'];
+
+// ── Calendar constants ────────────────────────── //
+const DAY_LABELS  = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+const MONTH_NAMES = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December'
 ];
 
-let _containerId     = '';
-let _role            = '';
-let _allSitters      = [];
-let _activeSitterId  = null;
+// ── Module state ──────────────────────────────── //
+let _containerId      = '';
+let _role             = '';
+let _allSitters       = [];
+let _activeSitterId   = null;
 let _activeSitterData = null;
+let _calYear, _calMonth;
 
-// ── Public Init ───────────────────────────────── //
+// ════════════════════════════════════════════════
+// PUBLIC INIT
+// ════════════════════════════════════════════════
 export async function initSitterCalendar(containerId, role, userEmail) {
   _containerId = containerId;
   _role        = role;
@@ -31,7 +60,7 @@ export async function initSitterCalendar(containerId, role, userEmail) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  container.innerHTML = '<div class="loading-indicator"><div class="spinner"></div> Loading schedule manager&hellip;</div>';
+  container.innerHTML = '<div class="loading-indicator"><div class="spinner"></div> Loading schedule manager\u2026</div>';
 
   try {
     const snap = await getDocs(query(collection(db, 'babysitters'), orderBy('name')));
@@ -42,10 +71,13 @@ export async function initSitterCalendar(containerId, role, userEmail) {
     return;
   }
 
+  const now = new Date();
+  _calYear  = now.getFullYear();
+  _calMonth = now.getMonth();
+
   if (role === 'admin') {
     renderAdminPicker(container);
   } else {
-    // Babysitter: match by email
     const own = _allSitters.find(s => s.email === userEmail);
     if (!own) {
       container.innerHTML = '<div class="empty-state">Your babysitter profile was not found. Contact an admin.</div>';
@@ -57,14 +89,16 @@ export async function initSitterCalendar(containerId, role, userEmail) {
   }
 }
 
-// ── Admin Sitter Picker ───────────────────────── //
+// ════════════════════════════════════════════════
+// ADMIN SITTER PICKER
+// ════════════════════════════════════════════════
 function renderAdminPicker(container) {
   if (!_allSitters.length) {
     container.innerHTML = '<div class="empty-state">No babysitters in database.</div>';
     return;
   }
 
-  const options = _allSitters
+  const opts = _allSitters
     .map(s => `<option value="${s.id}">${esc(s.name ?? 'Unnamed')}</option>`)
     .join('');
 
@@ -73,8 +107,7 @@ function renderAdminPicker(container) {
       <div class="form-group">
         <label>Manage Schedule For</label>
         <select class="form-control" id="sitter-select">
-          <option value="">Select a babysitter&hellip;</option>
-          ${options}
+          <option value="">Select a babysitter\u2026</option>${opts}
         </select>
       </div>
     </div>
@@ -82,265 +115,402 @@ function renderAdminPicker(container) {
 
   container.querySelector('#sitter-select').addEventListener('change', e => {
     const id = e.target.value;
-    const schedUI = document.getElementById('schedule-ui');
-    if (!schedUI) return;
-
-    if (!id) { schedUI.innerHTML = ''; return; }
-
+    const ui = document.getElementById('schedule-ui');
+    if (!ui) return;
+    if (!id) { ui.innerHTML = ''; return; }
     const sitter = _allSitters.find(s => s.id === id);
     if (!sitter) return;
-
     _activeSitterId   = id;
     _activeSitterData = { ...sitter };
-    renderScheduleUI(schedUI);
+    // Reset calendar to current month when switching sitters
+    const now = new Date();
+    _calYear  = now.getFullYear();
+    _calMonth = now.getMonth();
+    renderScheduleUI(ui);
   });
 }
 
-// ── Schedule Management UI ────────────────────── //
+// ════════════════════════════════════════════════
+// SCHEDULE UI — dates + times
+// ════════════════════════════════════════════════
 function renderScheduleUI(container) {
   if (!_activeSitterData) return;
+  container.innerHTML = buildDateSection() + buildTimeSection();
+  attachDateHandlers(container);
+  attachTimeHandlers(container);
+}
 
-  const openDates = [...(_activeSitterData.openDates ?? [])].sort();
-  const openTimes = new Set(_activeSitterData.openTimes ?? []);
-
-  // Date tags
-  const dateTags = openDates.length
-    ? openDates.map(d => `
-        <div class="blackout-tag" data-date="${esc(d)}">
-          ${esc(formatDisplayDate(d))}
-          <button type="button" aria-label="Remove ${esc(d)}" data-remove-date="${esc(d)}">&times;</button>
-        </div>`).join('')
-    : '<span style="font-size:0.84rem;color:var(--text-muted)">No open dates set.</span>';
-
-  // Time slot toggles
-  const timeToggles = ALL_SLOTS.map(t => {
-    const active = openTimes.has(t) ? ' selected' : '';
-    return `<button type="button" class="time-slot-btn${active}" data-time="${t}"
-              title="${openTimes.has(t) ? 'Click to block' : 'Click to unblock'}"
-              aria-pressed="${openTimes.has(t)}">${formatTime(t)}</button>`;
-  }).join('');
-
-  // Build time-range selects (re-used for block & restore)
-  const timeOptions = ALL_SLOTS
-    .map(t => `<option value="${t}">${formatTime(t)}</option>`).join('');
-
-  container.innerHTML = `
+// ════════════════════════════════════════════════
+// DATE SECTION — interactive calendar
+// ════════════════════════════════════════════════
+function buildDateSection() {
+  return `
     <div class="schedule-section">
-      <h4>Open Dates</h4>
-      <div class="blackout-list" id="open-dates-list">${dateTags}</div>
-      <div class="inline-form" style="margin-top:0.85rem">
-        <div class="form-group">
-          <label>Add Available Date</label>
-          <input type="date" class="form-control" id="add-date-input">
-        </div>
-        <button type="button" class="btn btn-primary btn-sm" id="add-date-btn">Add Date</button>
-      </div>
-      <div id="schedule-msg" style="margin-top:0.5rem;font-size:0.84rem;min-height:1.2em"></div>
-    </div>
-
-    <div class="schedule-section">
-      <h4>
-        Available Time Slots
-        <span style="font-size:0.76rem;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">
-          &mdash; click to toggle
+      <h4>Available Dates
+        <span style="font-size:0.76rem;font-weight:400;text-transform:none;
+                     letter-spacing:0;color:var(--text-muted)">
+          \u2014 click a date to toggle it
         </span>
       </h4>
-      <div class="time-slots-grid" id="time-slots-manage" style="gap:0.4rem">${timeToggles}</div>
+      <div id="sitter-date-cal-wrap">${buildDateCalHTML()}</div>
+      <div id="date-msg" style="margin-top:0.5rem;font-size:0.84rem;min-height:1.2em"></div>
+    </div>`;
+}
 
-      <div style="margin-top:1rem">
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end">
-          <div class="form-group" style="margin:0;min-width:110px">
-            <label style="font-size:0.76rem">Range From</label>
-            <select class="form-control" id="range-from">${timeOptions}</select>
-          </div>
-          <div class="form-group" style="margin:0;min-width:110px">
-            <label style="font-size:0.76rem">Range To</label>
-            <select class="form-control" id="range-to">${timeOptions}</select>
-          </div>
-          <div style="display:flex;gap:0.4rem">
-            <button type="button" class="btn btn-danger btn-sm" id="block-range-btn">Block Range</button>
-            <button type="button" class="btn btn-secondary btn-sm" id="restore-range-btn">Restore Range</button>
-          </div>
-        </div>
-        <div id="time-msg" style="margin-top:0.5rem;font-size:0.84rem;min-height:1.2em"></div>
+function buildDateCalHTML() {
+  const todayStr  = localDateStr(new Date());
+  const openDates = new Set(_activeSitterData.openDates ?? []);
+  const firstDay  = new Date(_calYear, _calMonth, 1).getDay();
+  const totalDays = new Date(_calYear, _calMonth + 1, 0).getDate();
+
+  let cells = '';
+  for (let i = 0; i < firstDay; i++) {
+    cells += '<div class="sdc-day empty"></div>';
+  }
+  for (let d = 1; d <= totalDays; d++) {
+    const str  = localDateStr(new Date(_calYear, _calMonth, d));
+    const past = str < todayStr;
+    const sel  = openDates.has(str);
+
+    let cls = 'sdc-day';
+    if (past)           cls += ' past';
+    if (str===todayStr) cls += ' today';
+    if (sel)            cls += ' selected';
+    if (!past)          cls += ' clickable';
+
+    cells += past
+      ? `<div class="${cls}">${d}</div>`
+      : `<div class="${cls}" data-sitter-date="${str}"
+             role="button" tabindex="0" aria-pressed="${sel}">${d}</div>`;
+  }
+
+  const headers = DAY_LABELS.map(l => `<span>${l}</span>`).join('');
+
+  return `
+    <div class="sitter-date-cal">
+      <div class="sdc-header">
+        <button class="sdc-nav" id="sdc-prev" aria-label="Previous month">&#8249;</button>
+        <span class="sdc-month-label">${MONTH_NAMES[_calMonth]} ${_calYear}</span>
+        <button class="sdc-nav" id="sdc-next" aria-label="Next month">&#8250;</button>
+      </div>
+      <div class="sdc-grid">
+        <div class="sdc-day-headers">${headers}</div>
+        <div class="sdc-dates">${cells}</div>
+      </div>
+    </div>`;
+}
+
+// Replaces only the calendar inside #sitter-date-cal-wrap
+function refreshDateCal(container) {
+  const wrap = container.querySelector('#sitter-date-cal-wrap')
+            ?? document.getElementById('sitter-date-cal-wrap');
+  if (!wrap) return;
+
+  wrap.innerHTML = buildDateCalHTML();
+
+  // Re-bind nav on the fresh calendar nodes
+  wrap.querySelector('#sdc-prev')?.addEventListener('click', () => {
+    _calMonth--;
+    if (_calMonth < 0) { _calMonth = 11; _calYear--; }
+    refreshDateCal(container);
+  });
+  wrap.querySelector('#sdc-next')?.addEventListener('click', () => {
+    _calMonth++;
+    if (_calMonth > 11) { _calMonth = 0; _calYear++; }
+    refreshDateCal(container);
+  });
+
+  bindDateCells(container);
+}
+
+function attachDateHandlers(container) {
+  container.querySelector('#sdc-prev')?.addEventListener('click', () => {
+    _calMonth--;
+    if (_calMonth < 0) { _calMonth = 11; _calYear--; }
+    refreshDateCal(container);
+  });
+  container.querySelector('#sdc-next')?.addEventListener('click', () => {
+    _calMonth++;
+    if (_calMonth > 11) { _calMonth = 0; _calYear++; }
+    refreshDateCal(container);
+  });
+  bindDateCells(container);
+}
+
+function bindDateCells(container) {
+  const wrap = container.querySelector('#sitter-date-cal-wrap')
+            ?? document.getElementById('sitter-date-cal-wrap');
+  if (!wrap) return;
+
+  wrap.querySelectorAll('[data-sitter-date]').forEach(el => {
+    const act = () => toggleDate(el.dataset.sitterDate, el);
+    el.addEventListener('click', act);
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); }
+    });
+  });
+}
+
+async function toggleDate(date, cell) {
+  if (!_activeSitterId) return;
+
+  const current  = _activeSitterData.openDates ?? [];
+  const removing = current.includes(date);
+
+  // Optimistic UI — flip the cell instantly before the write
+  if (cell) {
+    if (removing) {
+      cell.classList.remove('selected');
+      cell.setAttribute('aria-pressed', 'false');
+    } else {
+      cell.classList.add('selected');
+      cell.setAttribute('aria-pressed', 'true');
+    }
+  }
+
+  try {
+    if (removing) {
+      await updateDoc(doc(db, 'babysitters', _activeSitterId), { openDates: arrayRemove(date) });
+      _activeSitterData.openDates = current.filter(d => d !== date);
+    } else {
+      await updateDoc(doc(db, 'babysitters', _activeSitterId), { openDates: arrayUnion(date) });
+      _activeSitterData.openDates = [...new Set([...current, date])];
+    }
+    await recalcGlobalCalendar();
+    showMsg('date-msg', `${fmtShortDate(date)} ${removing ? 'removed' : 'added'}.`, 'success');
+  } catch (err) {
+    console.error('sittercalendar: toggleDate', err);
+    // Revert optimistic update on failure
+    if (cell) {
+      if (removing) {
+        cell.classList.add('selected');
+        cell.setAttribute('aria-pressed', 'true');
+      } else {
+        cell.classList.remove('selected');
+        cell.setAttribute('aria-pressed', 'false');
+      }
+    }
+    showMsg('date-msg', 'Failed to update. Please try again.', 'error');
+  }
+}
+
+// ════════════════════════════════════════════════
+// TIME SECTION — bar + range controls
+// ════════════════════════════════════════════════
+function buildTimeSection() {
+  const hourOpts = HOURS.map(h =>
+    `<option value="${h}">${fmtHourLabel(h)}</option>`
+  ).join('');
+
+  const minOpts = MINUTES.map(m =>
+    `<option value="${m}">:${m}</option>`
+  ).join('');
+
+  // Reusable hour+minute pair for a given prefix
+  const timePair = (prefix) => `
+    <div class="time-picker">
+      <select class="form-control" id="${prefix}-h" aria-label="Hour">
+        <option value="">Hour</option>${hourOpts}
+      </select>
+      <span class="time-sep">:</span>
+      <select class="form-control time-min" id="${prefix}-m" aria-label="Minute">
+        <option value="">Min</option>${minOpts}
+      </select>
+    </div>`;
+
+  const rangeRow = (label, prefix, btnId, btnCls, btnTxt) => `
+    <div class="time-range-row">
+      <span class="time-range-label">${label}</span>
+      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+        ${timePair(`${prefix}-from`)}
+        <span style="font-size:0.82rem;color:var(--text-muted)">to</span>
+        ${timePair(`${prefix}-to`)}
+        <button type="button" class="btn ${btnCls} btn-sm" id="${btnId}">${btnTxt}</button>
       </div>
     </div>`;
 
-  attachHandlers(container);
+  return `
+    <div class="schedule-section">
+      <h4>Available Time Slots</h4>
+
+      <div class="sitter-time-bar-wrap">
+        <div class="sitter-time-bar-labels">
+          <span>4 AM</span><span>12 PM</span><span>11 PM</span>
+        </div>
+        <div class="sitter-time-bar" id="sitter-time-bar">${buildTimeBarSlots()}</div>
+      </div>
+
+      ${rangeRow('Set range',     'set',     'set-range-btn',     'btn-primary',   'Set Available')}
+      ${rangeRow('Block range',   'block',   'block-range-btn',   'btn-danger',    'Block')}
+      ${rangeRow('Restore range', 'restore', 'restore-range-btn', 'btn-secondary', 'Restore')}
+
+      <div id="time-msg" style="margin-top:0.5rem;font-size:0.84rem;min-height:1.2em"></div>
+    </div>`;
 }
 
-// ── Event Handlers ────────────────────────────── //
-function attachHandlers(container) {
-  // Remove date via tag X button
-  container.querySelector('#open-dates-list')?.addEventListener('click', async e => {
-    const btn = e.target.closest('[data-remove-date]');
-    if (btn) await removeDateFromSitter(btn.dataset.removeDate);
+function buildTimeBarSlots() {
+  const open = new Set(_activeSitterData.openTimes ?? []);
+  return ALL_SLOTS
+    .map(t => `<div class="stb-slot${open.has(t) ? ' on' : ''}" title="${fmtTime(t)}"></div>`)
+    .join('');
+}
+
+function refreshTimeBar() {
+  const bar = document.getElementById('sitter-time-bar');
+  if (bar) bar.innerHTML = buildTimeBarSlots();
+}
+
+function attachTimeHandlers(container) {
+  // Set Available — replaces openTimes entirely with the chosen range
+  container.querySelector('#set-range-btn')?.addEventListener('click', async () => {
+    const from = readTime('set-from');
+    const to   = readTime('set-to');
+    if (!validateRange(from, to, 'time-msg')) return;
+    const slots = ALL_SLOTS.filter(t => t >= from && t <= to);
+    if (!slots.length) { showMsg('time-msg', 'No slots in that range.', 'error'); return; }
+    await writeOpenTimes(
+      slots, 'time-msg',
+      `Available set: ${fmtTime(from)} \u2013 ${fmtTime(to)}`
+    );
   });
 
-  // Add date
-  container.querySelector('#add-date-btn')?.addEventListener('click', async () => {
-    const input = container.querySelector('#add-date-input');
-    const date  = input?.value;
-    if (!date) { showMsg('schedule-msg', 'Please pick a date.', 'error'); return; }
-    await addDateToSitter(date);
-    if (input) input.value = '';
-  });
-
-  // Toggle individual time slot
-  container.querySelector('#time-slots-manage')?.addEventListener('click', async e => {
-    const btn = e.target.closest('.time-slot-btn');
-    if (!btn) return;
-    const time = btn.dataset.time;
-    if (btn.classList.contains('selected')) {
-      await removeTimesFromSitter([time], 'time-msg', `${formatTime(time)} blocked.`);
-    } else {
-      await addTimesToSitter([time], 'time-msg', `${formatTime(time)} restored.`);
-    }
-  });
-
-  // Block range
+  // Block — removes slots from openTimes
   container.querySelector('#block-range-btn')?.addEventListener('click', async () => {
-    const from = container.querySelector('#range-from')?.value;
-    const to   = container.querySelector('#range-to')?.value;
-    if (!from || !to || from >= to) {
-      showMsg('time-msg', '"From" must be earlier than "To".', 'error'); return;
-    }
+    const from = readTime('block-from');
+    const to   = readTime('block-to');
+    if (!validateRange(from, to, 'time-msg')) return;
     const slots = ALL_SLOTS.filter(t => t >= from && t < to);
     if (!slots.length) { showMsg('time-msg', 'No slots in that range.', 'error'); return; }
-    await removeTimesFromSitter(slots, 'time-msg', `${slots.length} slot${slots.length > 1 ? 's' : ''} blocked.`);
+    await removeSlots(slots, 'time-msg',
+      `${slots.length} slot${slots.length !== 1 ? 's' : ''} blocked.`);
   });
 
-  // Restore range
+  // Restore — adds slots back to openTimes
   container.querySelector('#restore-range-btn')?.addEventListener('click', async () => {
-    const from = container.querySelector('#range-from')?.value;
-    const to   = container.querySelector('#range-to')?.value;
-    if (!from || !to || from >= to) {
-      showMsg('time-msg', '"From" must be earlier than "To".', 'error'); return;
-    }
-    const slots = ALL_SLOTS.filter(t => t >= from && t < to);
+    const from = readTime('restore-from');
+    const to   = readTime('restore-to');
+    if (!validateRange(from, to, 'time-msg')) return;
+    const slots = ALL_SLOTS.filter(t => t >= from && t <= to);
     if (!slots.length) { showMsg('time-msg', 'No slots in that range.', 'error'); return; }
-    await addTimesToSitter(slots, 'time-msg', `${slots.length} slot${slots.length > 1 ? 's' : ''} restored.`);
+    await addSlots(slots, 'time-msg',
+      `${slots.length} slot${slots.length !== 1 ? 's' : ''} restored.`);
   });
 }
 
-// ── Firestore Mutations ───────────────────────── //
-async function addDateToSitter(date) {
+// ════════════════════════════════════════════════
+// FIRESTORE WRITES
+// ════════════════════════════════════════════════
+async function writeOpenTimes(slots, msgId, successMsg) {
   if (!_activeSitterId) return;
   try {
-    await updateDoc(doc(db, 'babysitters', _activeSitterId), { openDates: arrayUnion(date) });
-    _activeSitterData.openDates = [...new Set([...(_activeSitterData.openDates ?? []), date])];
+    await updateDoc(doc(db, 'babysitters', _activeSitterId), { openTimes: slots });
+    _activeSitterData.openTimes = slots;
     await recalcGlobalCalendar();
-    rerenderSchedule();
-    showMsg('schedule-msg', `${formatDisplayDate(date)} added.`, 'success');
+    refreshTimeBar();
+    showMsg(msgId, successMsg, 'success');
   } catch (err) {
-    console.error('sittercalendar: addDate error', err);
-    showMsg('schedule-msg', 'Failed to add date. Please try again.', 'error');
+    console.error('sittercalendar: writeOpenTimes', err);
+    showMsg(msgId, 'Failed to update. Please try again.', 'error');
   }
 }
 
-async function removeDateFromSitter(date) {
+async function addSlots(slots, msgId, successMsg) {
   if (!_activeSitterId) return;
   try {
-    await updateDoc(doc(db, 'babysitters', _activeSitterId), { openDates: arrayRemove(date) });
-    _activeSitterData.openDates = (_activeSitterData.openDates ?? []).filter(d => d !== date);
+    await updateDoc(doc(db, 'babysitters', _activeSitterId), { openTimes: arrayUnion(...slots) });
+    _activeSitterData.openTimes = [
+      ...new Set([...(_activeSitterData.openTimes ?? []), ...slots])
+    ];
     await recalcGlobalCalendar();
-    rerenderSchedule();
-    showMsg('schedule-msg', `${formatDisplayDate(date)} removed.`, 'success');
+    refreshTimeBar();
+    showMsg(msgId, successMsg, 'success');
   } catch (err) {
-    console.error('sittercalendar: removeDate error', err);
-    showMsg('schedule-msg', 'Failed to remove date. Please try again.', 'error');
+    console.error('sittercalendar: addSlots', err);
+    showMsg(msgId, 'Failed to update. Please try again.', 'error');
   }
 }
 
-async function addTimesToSitter(times, msgElId, successMsg) {
+async function removeSlots(slots, msgId, successMsg) {
   if (!_activeSitterId) return;
   try {
-    await updateDoc(doc(db, 'babysitters', _activeSitterId), { openTimes: arrayUnion(...times) });
-    _activeSitterData.openTimes = [...new Set([...(_activeSitterData.openTimes ?? []), ...times])];
+    await updateDoc(doc(db, 'babysitters', _activeSitterId), { openTimes: arrayRemove(...slots) });
+    _activeSitterData.openTimes = (_activeSitterData.openTimes ?? []).filter(t => !slots.includes(t));
     await recalcGlobalCalendar();
-    rerenderSchedule();
-    showMsg(msgElId, successMsg, 'success');
+    refreshTimeBar();
+    showMsg(msgId, successMsg, 'success');
   } catch (err) {
-    console.error('sittercalendar: addTimes error', err);
-    showMsg(msgElId, 'Failed to update. Please try again.', 'error');
+    console.error('sittercalendar: removeSlots', err);
+    showMsg(msgId, 'Failed to update. Please try again.', 'error');
   }
 }
 
-async function removeTimesFromSitter(times, msgElId, successMsg) {
-  if (!_activeSitterId) return;
-  try {
-    await updateDoc(doc(db, 'babysitters', _activeSitterId), { openTimes: arrayRemove(...times) });
-    _activeSitterData.openTimes = (_activeSitterData.openTimes ?? []).filter(t => !times.includes(t));
-    await recalcGlobalCalendar();
-    rerenderSchedule();
-    showMsg(msgElId, successMsg, 'success');
-  } catch (err) {
-    console.error('sittercalendar: removeTimes error', err);
-    showMsg(msgElId, 'Failed to update. Please try again.', 'error');
-  }
-}
-
-// ── Recalculate Global Calendar ───────────────── //
-// Called after every schedule change.
-// Recomputes openDates/openTimes from all sitters.
 async function recalcGlobalCalendar() {
   try {
     const snap     = await getDocs(collection(db, 'babysitters'));
     const allDates = new Set();
     const allTimes = new Set();
-
     snap.forEach(d => {
-      const data = d.data();
-      (data.openDates ?? []).forEach(date => allDates.add(date));
-      (data.openTimes ?? []).forEach(time => allTimes.add(time));
+      (d.data().openDates ?? []).forEach(v => allDates.add(v));
+      (d.data().openTimes ?? []).forEach(v => allTimes.add(v));
     });
-
     await setDoc(doc(db, 'calendar', 'main'), {
       openDates: [...allDates].sort(),
       openTimes: [...allTimes].sort()
     });
   } catch (err) {
-    console.error('sittercalendar: recalc error', err);
+    console.error('sittercalendar: recalcGlobalCalendar', err);
   }
 }
 
-// ── Re-render After Mutation ──────────────────── //
-function rerenderSchedule() {
-  if (_role === 'admin') {
-    const ui = document.getElementById('schedule-ui');
-    if (ui) renderScheduleUI(ui);
-  } else {
-    const container = document.getElementById(_containerId);
-    if (container) renderScheduleUI(container);
-  }
+// ════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════
+function readTime(prefix) {
+  const h = document.getElementById(`${prefix}-h`)?.value;
+  const m = document.getElementById(`${prefix}-m`)?.value;
+  if (!h || m === '' || m == null) return null;
+  return `${String(h).padStart(2,'0')}:${m}`;
 }
 
-// ── Status Messages ───────────────────────────── //
-function showMsg(elId, msg, type = 'info') {
-  const el = document.getElementById(elId);
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = type === 'error'
-    ? '#C0392B'
-    : type === 'success'
-      ? '#065F46'
-      : 'var(--text-muted)';
-  clearTimeout(el._timer);
-  el._timer = setTimeout(() => { if (el) el.textContent = ''; }, 3500);
+function validateRange(from, to, msgId) {
+  if (!from)      { showMsg(msgId, 'Select a start hour and minute.', 'error'); return false; }
+  if (!to)        { showMsg(msgId, 'Select an end hour and minute.',   'error'); return false; }
+  if (from >= to) { showMsg(msgId, 'End time must be after start time.', 'error'); return false; }
+  return true;
 }
 
-// ── Helpers ───────────────────────────────────── //
-function formatTime(str) {
+function fmtHourLabel(h) {
+  if (h === 12) return '12 PM';
+  return h < 12 ? `${h} AM` : `${h - 12} PM`;
+}
+
+function fmtTime(str) {
   if (!str) return '';
   const [h, m] = str.split(':').map(Number);
   return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
-function formatDisplayDate(str) {
+function fmtShortDate(str) {
   if (!str) return str;
   const [y, mo, d] = str.split('-').map(Number);
   return new Date(y, mo - 1, d)
-    .toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    .toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// Use local date string to avoid UTC offset bugs when constructing dates
+function localDateStr(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+
+function showMsg(elId, msg, type = 'info') {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = type === 'error' ? '#C0392B'
+    : type === 'success' ? '#065F46'
+    : 'var(--text-muted)';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { if (el) el.textContent = ''; }, 3500);
 }
 
 function esc(str) {
