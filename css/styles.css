@@ -1015,3 +1015,140 @@ select.form-control {
   .inline-form { flex-direction: column; }
   .section-header { flex-direction: column; align-items: flex-start; }
 }
+
+/* ── Sitter Date Calendar ───────────────────────── */
+.sitter-date-cal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  max-width: 360px;
+}
+
+.sdc-header {
+  background: var(--primary);
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sdc-month-label {
+  font-family: 'Nunito Sans', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #fff;
+}
+.sdc-nav {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.75);
+  font-size: 1.15rem;
+  cursor: pointer;
+  padding: 0.2rem 0.45rem;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  transition: color var(--transition), background var(--transition);
+}
+.sdc-nav:hover { color: #fff; background: rgba(255,255,255,0.18); }
+
+.sdc-grid { padding: 0.6rem 0.75rem 0.75rem; }
+
+.sdc-day-headers {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 0.3rem;
+}
+.sdc-day-headers span {
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem;
+}
+
+.sdc-dates {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.sdc-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  user-select: none;
+}
+.sdc-day.clickable {
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.sdc-day.clickable:hover { background: var(--primary-pale); color: var(--primary-dark); }
+.sdc-day.today { border: 2px solid var(--primary-light); font-weight: 600; }
+.sdc-day.past  { opacity: 0.22; }
+.sdc-day.selected {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 600;
+}
+.sdc-day.selected.clickable:hover { background: var(--primary-dark); }
+
+/* ── Time Bar ───────────────────────────────────── */
+.sitter-time-bar-wrap { margin: 0.85rem 0 0.25rem; }
+.sitter-time-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+.sitter-time-bar {
+  display: flex;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--border);
+}
+.stb-slot { flex: 1; background: var(--border); }
+.stb-slot.on { background: var(--primary); }
+
+/* ── Time Range Controls ────────────────────────── */
+.time-range-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.time-range-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  min-width: 62px;
+  flex-shrink: 0;
+}
+
+/* ── Inline Time Picker (hour + minute selects) ─── */
+.time-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: nowrap;   /* never let hour and minute land on separate lines */
+}
+.time-hour { width: 88px !important;  min-width: 0; }
+.time-min  { width: 68px !important;  min-width: 0; }
+.time-sep {
+  font-weight: 700;
+  color: var(--text-muted);
+  font-size: 1rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
