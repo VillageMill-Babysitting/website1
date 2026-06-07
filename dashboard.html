@@ -211,31 +211,33 @@
                   <input type="date" id="booking-date" class="form-control" required>
                 </div>
 
-                <!-- Time range — hour and minute populated by booking.js on init -->
-                <div class="form-row">
-                  <div class="form-group">
-                    <label>Start Time</label>
-                    <div class="time-picker">
-                      <select id="booking-start-hour" class="form-control" required aria-label="Start hour">
-                        <option value="">Hour</option>
-                      </select>
-                      <span class="time-sep">:</span>
-                      <select id="booking-start-min" class="form-control time-min" required aria-label="Start minute">
-                        <option value="">Min</option>
-                      </select>
-                    </div>
+                <!-- Start and end time — each on its own row, hour + minute compact selects -->
+                <div class="form-group">
+                  <label>Start Time</label>
+                  <div class="time-picker">
+                    <select id="booking-start-hour" class="form-control time-hour"
+                            required aria-label="Start hour">
+                      <option value="">Hour</option>
+                    </select>
+                    <span class="time-sep">:</span>
+                    <select id="booking-start-min" class="form-control time-min"
+                            required aria-label="Start minute">
+                      <option value="">Min</option>
+                    </select>
                   </div>
-                  <div class="form-group">
-                    <label>End Time</label>
-                    <div class="time-picker">
-                      <select id="booking-end-hour" class="form-control" required aria-label="End hour">
-                        <option value="">Hour</option>
-                      </select>
-                      <span class="time-sep">:</span>
-                      <select id="booking-end-min" class="form-control time-min" required aria-label="End minute">
-                        <option value="">Min</option>
-                      </select>
-                    </div>
+                </div>
+                <div class="form-group">
+                  <label>End Time</label>
+                  <div class="time-picker">
+                    <select id="booking-end-hour" class="form-control time-hour"
+                            required aria-label="End hour">
+                      <option value="">Hour</option>
+                    </select>
+                    <span class="time-sep">:</span>
+                    <select id="booking-end-min" class="form-control time-min"
+                            required aria-label="End minute">
+                      <option value="">Min</option>
+                    </select>
                   </div>
                 </div>
 
