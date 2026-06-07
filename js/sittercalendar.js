@@ -194,8 +194,14 @@ function buildDateCalHTML() {
         <button class="sdc-nav" id="sdc-next" aria-label="Next month">&#8250;</button>
       </div>
       <div class="sdc-grid">
-        <div class="sdc-day-headers">${headers}</div>
-        <div class="sdc-dates">${cells}</div>
+        <div class="sdc-day-headers"
+             style="display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:0.3rem">
+          ${headers}
+        </div>
+        <div class="sdc-dates"
+             style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px">
+          ${cells}
+        </div>
       </div>
     </div>`;
 }
@@ -309,7 +315,7 @@ function buildTimeSection() {
   // Reusable hour+minute pair for a given prefix
   const timePair = (prefix) => `
     <div class="time-picker">
-      <select class="form-control" id="${prefix}-h" aria-label="Hour">
+      <select class="form-control time-hour" id="${prefix}-h" aria-label="Hour">
         <option value="">Hour</option>${hourOpts}
       </select>
       <span class="time-sep">:</span>
