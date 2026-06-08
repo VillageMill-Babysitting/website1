@@ -1143,8 +1143,8 @@ select.form-control {
   gap: 0.25rem;
   flex-wrap: nowrap;   /* never let hour and minute land on separate lines */
 }
-.time-hour { width: 88px !important;  min-width: 0; }
-.time-min  { width: 68px !important;  min-width: 0; }
+.time-hour { width: 98px !important;  min-width: 0; }
+.time-min  { width: 88px !important;  min-width: 0; }
 .time-sep {
   font-weight: 700;
   color: var(--text-muted);
